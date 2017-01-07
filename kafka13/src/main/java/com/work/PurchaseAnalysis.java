@@ -17,14 +17,13 @@ import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.KeyValueMapper;
 
 import com.alibaba.fastjson.JSON;
-import com.jasongj.kafka.stream.timeextractor.OrderTimestampExtractor;
 import com.work.model.Category;
-import com.work.model.CategoryItemSum;
 import com.work.model.Item;
 import com.work.model.ItemSum;
 import com.work.model.Order;
 import com.work.model.User;
 import com.work.serdes.SerdesFactory;
+import com.work.timeextractor.OrderTimestampExtractor;
 
 
 public class PurchaseAnalysis {
@@ -51,9 +50,11 @@ public class PurchaseAnalysis {
 				.map((String userName, OrderUser orderUser) -> new KeyValue<String, OrderUser>(orderUser.itemName, orderUser))
 				.through(Serdes.String(), SerdesFactory.serdFrom(OrderUser.class), (String key, OrderUser orderUser, int numPartitions) -> (orderUser.getItemName().hashCode() & 0x7FFFFFFF) % numPartitions, "orderuser2-repartition-by-item")
 				.leftJoin(itemTable, (OrderUser orderUser, Item item) -> OrderUserItem.fromOrderUser(orderUser, item), Serdes.String(), SerdesFactory.serdFrom(OrderUser.class))
-				//.filter((String item, OrderUserItem orderUserItem) -> StringUtils.compare(orderUserItem.userAddress, orderUserItem.itemAddress) == 0) //to ensure item and user in same address
+				.filter((String item, OrderUserItem orderUserItem) -> orderUserItem.getAge()>=18 && orderUserItem.getAge()<=35) //to ensure item and user in same address
 				//.map((String item, OrderUserItem orderUserItem) -> KeyValue.<String, OrderSum>pair(orderUserItem.userAddress+","+orderUserItem.gender, OrderSum.fromOrderUserItem(orderUserItem)))
-				.map((String item, OrderUserItem orderUserItem) -> KeyValue.<String, ItemSum>pair(orderUserItem.getItemType(), new ItemSum(orderUserItem.getItemName(), orderUserItem.getItemType(),orderUserItem.getItemPrice(),orderUserItem.getQuantity())));
+				.map((String item, OrderUserItem orderUserItem) -> KeyValue.<String, ItemSum>pair(orderUserItem.getItemType(), 
+						new ItemSum(orderUserItem.getItemName(), orderUserItem.getItemType(),
+								orderUserItem.getItemPrice(),orderUserItem.getQuantity(), orderUserItem.getTransactionDate())));
 		//kStreamDetail.foreach((str, dou) -> System.out.printf("%s-%s\n", str, JSON.toJSONString(dou)));
 		KTable<String, Category> kTable=kStreamDetail.groupByKey(Serdes.String(), SerdesFactory.serdFrom(ItemSum.class))
 				.aggregate(new Initializer<Category>(){
@@ -71,11 +72,6 @@ public class PurchaseAnalysis {
 						}},
 						SerdesFactory.serdFrom(Category.class), "category");
 						//TimeWindows.of(60*60*1000L).advanceBy(5000L),SerdesFactory.serdFrom(Category.class), "category-windwo");
-				//.reduce((ItemSum is1, ItemSum is2) -> {return is1.add(is2);}, TimeWindows.of(60*60*1000L).advanceBy(5000L),"itemSum-state-store");
-				/*.reduce((ItemSum is1, ItemSum is2) -> {
-						System.out.printf("----%s\n",JSON.toJSONString(is2));
-						return is1.add(is2);
-					},"itemSum-state-store");*/
 		kTable.foreach((str, dou) -> System.out.printf("%s-%s\n", JSON.toJSONString(str), JSON.toJSONString(dou)));
 		
 		//kTable.toStream().map
@@ -305,63 +301,6 @@ public class PurchaseAnalysis {
 			orderUserItem.itemType = item.getType();
 			orderUserItem.itemPrice = item.getPrice();
 			return orderUserItem;
-		}
-	}
-
-	public static class OrderSum {
-		
-		private String address;
-		private String gender;
-		private int orderCount;
-		private int itemCount;
-		private double amtTotal;
-		
-		public String getAddress() {
-			return address;
-		}
-		public void setAddress(String address) {
-			this.address = address;
-		}
-		public String getGender() {
-			return gender;
-		}
-		public void setGender(String gender) {
-			this.gender = gender;
-		}
-		public int getOrderCount() {
-			return orderCount;
-		}
-		public void setOrderCount(int orderCount) {
-			this.orderCount = orderCount;
-		}
-		public int getItemCount() {
-			return itemCount;
-		}
-		public void setItemCount(int itemCount) {
-			this.itemCount = itemCount;
-		}
-		public double getAmtTotal() {
-			return amtTotal;
-		}
-		public void setAmtTotal(double amtTotal) {
-			this.amtTotal = amtTotal;
-		}
-		
-		public static OrderSum fromOrderUserItem(OrderUserItem orderUserItem){
-			OrderSum orderSum = new OrderSum();
-			orderSum.setAddress(orderUserItem.getUserAddress());
-			orderSum.setGender(orderUserItem.getGender());
-			orderSum.setOrderCount(1);
-			orderSum.setItemCount(orderUserItem.getQuantity());
-			orderSum.setAmtTotal(orderUserItem.getQuantity()*orderUserItem.getItemPrice());
-			return orderSum;
-		}
-		
-		public OrderSum add(OrderSum orderSum){
-			this.orderCount++;
-			this.itemCount+=orderSum.getItemCount();
-			this.amtTotal+=orderSum.getAmtTotal();
-			return this;
 		}
 	}
 }

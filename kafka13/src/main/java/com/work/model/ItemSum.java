@@ -7,6 +7,7 @@ public class ItemSum {
 	private int count;
 	private double ammount;
 	private int rank;
+	private long transactionDate;
 	
 	public ItemSum(){}
 	
@@ -25,6 +26,23 @@ public class ItemSum {
 		this.ammount=price*count;
 	}
 	
+	public ItemSum(String itemName, String category, double price, int count, long transactionDate){
+		this.itemName=itemName;
+		this.category=category;
+		this.price=price;
+		this.count=count;
+		this.ammount=price*count;
+		this.transactionDate=transactionDate;
+	}
+	
+	public long getTransactionDate() {
+		return transactionDate;
+	}
+
+	public void setTransactionDate(long transactionDate) {
+		this.transactionDate = transactionDate;
+	}
+
 	public int getRank() {
 		return rank;
 	}
